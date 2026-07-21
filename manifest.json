@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "SOP Screen Snippet Recorder",
+  "name": "Screen Snippet Recorder",
   "version": "0.1.0",
-  "description": "Record a click-through workflow and export it as a step-by-step SOP .docx document.",
+  "description": "Record a click-through workflow and export it as a step-by-step .docx document.",
   "permissions": ["activeTab", "scripting", "storage", "tabs"],
   "background": {
     "service_worker": "background.js"

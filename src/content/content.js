@@ -17,6 +17,7 @@ async function init() {
 
   let stepCount = state.stepCount;
   let isCapturing = false;
+  let partsCount = state.parts.length;
   let currentPart =
     state.parts.find((part) => part.id === state.meta.currentPartId) ?? state.parts[state.parts.length - 1];
 
@@ -54,6 +55,7 @@ async function init() {
       const res = await sendToBackground({ type: MSG.NEW_PART });
       if (res?.ok) {
         currentPart = res.part;
+        partsCount += 1;
         render();
       }
     },
@@ -68,7 +70,7 @@ async function init() {
   });
 
   function render(warning) {
-    controlBar.updateState({ partTitle: currentPart?.title ?? '', stepCount, warning });
+    controlBar.updateState({ partTitle: currentPart?.title ?? '', stepCount, warning, nextPartNumber: partsCount + 1 });
   }
   render();
 }

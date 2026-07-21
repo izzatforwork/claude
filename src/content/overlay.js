@@ -52,7 +52,7 @@ export function createControlBar({ onContinue, onExport }) {
   bar.innerHTML = `
     <span class="sop-status" data-role="status"></span>
     <span class="sop-warning" data-role="warning" hidden>Storage almost full</span>
-    <button data-role="continue" type="button">Continue to Part 2</button>
+    <button data-role="continue" type="button"></button>
     <button data-role="export" type="button" class="sop-stop">Export</button>
   `;
   shadow.appendChild(bar);
@@ -67,9 +67,10 @@ export function createControlBar({ onContinue, onExport }) {
 
   document.documentElement.appendChild(host);
 
-  function updateState({ partTitle, stepCount, warning }) {
+  function updateState({ partTitle, stepCount, warning, nextPartNumber }) {
     statusEl.textContent = `● Recording — ${partTitle} — ${stepCount} step(s)`;
     warningEl.hidden = !warning;
+    continueBtn.textContent = `Continue to Part ${nextPartNumber}`;
   }
 
   function hide() {

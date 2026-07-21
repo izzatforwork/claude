@@ -106,12 +106,15 @@ async function handleStopSession() {
   await storage.setMeta(meta);
   await clearBadge();
 
+  const exportUrl = chrome.runtime.getURL(`export.html?session=${meta.id}`);
+
   // Check if export tab still exists; reuse if so, otherwise create new one
   if (exportTabId) {
     try {
       await chrome.tabs.get(exportTabId);
-      // Tab exists, focus it
-      await chrome.tabs.update(exportTabId, { active: true });
+      // Tab exists: reload it with the current session's URL so a tab left over
+      // from a completed export doesn't keep showing stale "Downloaded" state.
+      await chrome.tabs.update(exportTabId, { active: true, url: exportUrl });
       return { ok: true };
     } catch (err) {
       // Tab doesn't exist, clear ID and create new one
@@ -120,7 +123,7 @@ async function handleStopSession() {
   }
 
   // Create new export tab
-  const newTab = await chrome.tabs.create({ url: chrome.runtime.getURL(`export.html?session=${meta.id}`) });
+  const newTab = await chrome.tabs.create({ url: exportUrl });
   exportTabId = newTab.id;
   return { ok: true };
 }

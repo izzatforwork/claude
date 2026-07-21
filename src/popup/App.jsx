@@ -81,7 +81,7 @@ export default function App() {
         </button>
       )}
       {view === 'active' && (
-        <p>Recording in progress. Use the floating bar on the page to Pause, Continue to a new part, or Stop.</p>
+        <p>Recording in progress. Use the floating Capture button on the page to capture a step, then use the floating bar to Continue to a new part or Export when done.</p>
       )}
       {view === 'resuming' && <p>Resuming recording on this page…</p>}
       {view === 'stopped' && (
