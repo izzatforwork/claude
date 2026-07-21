@@ -61,6 +61,9 @@ async function init() {
       await sendToBackground({ type: MSG.STOP_SESSION });
       captureBtn.destroy();
       controlBar.destroy();
+      // Allow a fresh Start Recording on this same tab (without navigating)
+      // to re-run init() instead of being silently skipped by the guard above.
+      window.__sopRecorderInjected = false;
     },
   });
 

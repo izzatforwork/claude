@@ -61,6 +61,16 @@ export default function App() {
     }
   }
 
+  async function reopenExport() {
+    try {
+      await sendToBackground({ type: MSG.STOP_SESSION });
+      window.close();
+    } catch (err) {
+      setError(String(err?.message ?? err));
+      setView('error');
+    }
+  }
+
   return (
     <div style={{ padding: 16 }}>
       <h1 style={{ fontSize: 15, margin: '0 0 12px' }}>Screen Snippet Recorder</h1>
@@ -74,7 +84,14 @@ export default function App() {
         <p>Recording in progress. Use the floating bar on the page to Pause, Continue to a new part, or Stop.</p>
       )}
       {view === 'resuming' && <p>Resuming recording on this page…</p>}
-      {view === 'stopped' && <p>Recording stopped. Finish the export in the tab that just opened.</p>}
+      {view === 'stopped' && (
+        <>
+          <p>Recording stopped.</p>
+          <button onClick={reopenExport} style={buttonStyle}>
+            Reopen Export Tab
+          </button>
+        </>
+      )}
       {view === 'error' && <p style={{ color: '#dc2626' }}>Error: {error}</p>}
     </div>
   );
