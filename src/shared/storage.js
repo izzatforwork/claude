@@ -66,5 +66,5 @@ export async function getBytesInUseRatio() {
 }
 
 export function isSessionLive(meta) {
-  return !!meta && (meta.status === STATUS.ACTIVE || meta.status === STATUS.INTERRUPTED);
+  return !!meta && meta.status === STATUS.ACTIVE;
 }

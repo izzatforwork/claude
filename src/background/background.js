@@ -2,20 +2,20 @@ import { MSG, STATUS, STORAGE_WARN_RATIO } from '../shared/constants.js';
 import { registerMessageRouter } from '../shared/messaging.js';
 import * as storage from '../shared/storage.js';
 import { captureAndComposite } from './capture.js';
-import { setActiveBadge, setInterruptedBadge, clearBadge } from './badge.js';
+import { setActiveBadge, setBlockedBadge, clearBadge } from './badge.js';
 
 let exportTabId = null; // Track the ID of the currently-open export tab
 
 registerMessageRouter({
   [MSG.START_SESSION]: handleStartSession,
-  [MSG.RESUME_SESSION]: handleResumeSession,
   [MSG.GET_STATE]: handleGetState,
   [MSG.CAPTURE_STEP]: handleCaptureStep,
   [MSG.NEW_PART]: handleNewPart,
   [MSG.STOP_SESSION]: handleStopSession,
+  [MSG.CANCEL_SESSION]: handleCancelSession,
 });
 
-async function handleStartSession({ tabId, windowId }) {
+async function handleStartSession({ tabId }) {
   await storage.clearSession(); // wipe any leftover from a previous unexported session
   const partId = crypto.randomUUID();
   const now = Date.now();
@@ -24,8 +24,7 @@ async function handleStartSession({ tabId, windowId }) {
     id: crypto.randomUUID(),
     status: STATUS.ACTIVE,
     currentPartId: partId,
-    trackedTabId: tabId,
-    trackedWindowId: windowId,
+    lastActiveTabId: tabId,
     createdAt: now,
     updatedAt: now,
   });
@@ -33,18 +32,10 @@ async function handleStartSession({ tabId, windowId }) {
   return { ok: true };
 }
 
-async function handleResumeSession({ tabId, windowId }) {
-  const meta = await storage.getMeta();
-  if (!meta) return { ok: false, error: 'no-session' };
-  meta.status = STATUS.ACTIVE;
-  meta.trackedTabId = tabId;
-  meta.trackedWindowId = windowId;
-  meta.updatedAt = Date.now();
-  await storage.setMeta(meta);
+async function handleCancelSession() {
+  await storage.clearSession();
   await clearBadge();
-  const stepIndex = await storage.getStepIndex();
-  const parts = await storage.getParts();
-  return { ok: true, meta, parts, stepCount: stepIndex.length };
+  return { ok: true };
 }
 
 async function handleGetState() {
@@ -128,28 +119,60 @@ async function handleStopSession() {
   return { ok: true };
 }
 
-// --- activeTab-lapse detection: activeTab is revoked the instant the tracked
-// tab navigates to a new page or is closed, taking the injected content
-// script/overlay with it. We can't re-inject without a fresh user gesture, so
-// we just surface a badge telling the user to click the toolbar icon to resume. ---
+// --- Tab-following: with host_permissions on <all_urls>, recording is no
+// longer scoped to one "tracked" tab. Whenever the active tab changes, or the
+// active tab finishes loading a new page (including a full cross-site
+// navigation, not just SPA routing), we re-inject the content script so the
+// floating button follows the user around the browser without needing a
+// fresh click on the toolbar icon. Chrome-internal pages (chrome://, the Web
+// Store, etc.) can never be scripted — recording keeps running, we just show
+// a "blocked" badge until the user switches to a normal page. ---
 
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
-  if (changeInfo.status !== 'loading') return;
+const RESTRICTED_URL_RE = /^(chrome|chrome-extension|edge|about|devtools|view-source):/i;
+
+function isInjectableUrl(url) {
+  if (!url) return false;
+  if (RESTRICTED_URL_RE.test(url)) return false;
+  if (url.startsWith('https://chrome.google.com/webstore')) return false;
+  if (url.startsWith('https://microsoftedge.microsoft.com/addons')) return false;
+  return true;
+}
+
+async function maybeInject(tabId) {
   const meta = await storage.getMeta();
-  if (!meta || meta.trackedTabId !== tabId || meta.status !== STATUS.ACTIVE) return;
-  meta.status = STATUS.INTERRUPTED;
+  if (!meta || meta.status !== STATUS.ACTIVE) return;
+
+  let tab;
+  try {
+    tab = await chrome.tabs.get(tabId);
+  } catch {
+    return; // tab no longer exists
+  }
+  if (!tab.active) return;
+
+  if (!isInjectableUrl(tab.url)) {
+    await setBlockedBadge();
+    return;
+  }
+
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+  } catch {
+    return; // page not scriptable for some other reason (e.g. still loading); leave badge as-is
+  }
+
+  meta.lastActiveTabId = tabId;
   meta.updatedAt = Date.now();
   await storage.setMeta(meta);
-  await setInterruptedBadge();
-});
+  const stepIndex = await storage.getStepIndex();
+  await setActiveBadge(stepIndex.length);
+}
 
-chrome.tabs.onRemoved.addListener(async (tabId) => {
-  const meta = await storage.getMeta();
-  if (!meta || meta.trackedTabId !== tabId || meta.status !== STATUS.ACTIVE) return;
-  meta.status = STATUS.INTERRUPTED;
-  meta.updatedAt = Date.now();
-  await storage.setMeta(meta);
-  await setInterruptedBadge();
+chrome.tabs.onActivated.addListener(({ tabId }) => maybeInject(tabId));
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status !== 'complete' || !tab.active) return;
+  maybeInject(tabId);
 });
 
 // Detect when export tab is closed

@@ -2,6 +2,16 @@ import { useEffect, useState } from 'react';
 import { MSG, STATUS } from '../shared/constants.js';
 import { sendToBackground } from '../shared/messaging.js';
 
+const RESTRICTED_URL_RE = /^(chrome|chrome-extension|edge|about|devtools|view-source):/i;
+
+function isRestrictedUrl(url) {
+  if (!url) return true;
+  if (RESTRICTED_URL_RE.test(url)) return true;
+  if (url.startsWith('https://chrome.google.com/webstore')) return true;
+  if (url.startsWith('https://microsoftedge.microsoft.com/addons')) return true;
+  return false;
+}
+
 async function getActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   return tab;
@@ -12,7 +22,7 @@ async function injectContentScript(tabId) {
 }
 
 export default function App() {
-  const [view, setView] = useState('loading'); // loading | start | active | resuming | stopped | error
+  const [view, setView] = useState('loading'); // loading | start | active | stopped | error
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -21,9 +31,10 @@ export default function App() {
       const status = state?.meta?.status;
       if (status === STATUS.ACTIVE) {
         setView('active');
-      } else if (status === STATUS.INTERRUPTED) {
-        setView('resuming');
-        await resume();
+        // The background auto re-injects on tab switch/navigation, but not for
+        // the tab that's already active when the popup happens to be opened
+        // (e.g. right after a browser/service-worker restart) — top up here.
+        ensureInjected();
       } else if (status === STATUS.STOPPED) {
         setView('stopped');
       } else {
@@ -33,18 +44,14 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function resume() {
+  async function ensureInjected() {
     try {
       const tab = await getActiveTab();
-      if (!tab?.id) throw new Error('No active tab found');
-      // Order matters: regrant/reattach the session in the background BEFORE
-      // injecting, so content.js's initial GET_STATE already sees status 'active'.
-      await sendToBackground({ type: MSG.RESUME_SESSION, tabId: tab.id, windowId: tab.windowId });
-      await injectContentScript(tab.id);
-      window.close();
-    } catch (err) {
-      setError(String(err?.message ?? err));
-      setView('error');
+      if (tab?.id && !isRestrictedUrl(tab.url)) {
+        await injectContentScript(tab.id);
+      }
+    } catch {
+      // Best-effort only; the badge already reflects blocked/active state.
     }
   }
 
@@ -52,9 +59,29 @@ export default function App() {
     try {
       const tab = await getActiveTab();
       if (!tab?.id) throw new Error('No active tab found');
-      await sendToBackground({ type: MSG.START_SESSION, tabId: tab.id, windowId: tab.windowId });
-      await injectContentScript(tab.id);
+      if (isRestrictedUrl(tab.url)) {
+        throw new Error('Cannot record on this page (Chrome system pages, the Web Store, etc). Open a regular webpage and try again.');
+      }
+      await sendToBackground({ type: MSG.START_SESSION, tabId: tab.id });
+      try {
+        await injectContentScript(tab.id);
+      } catch (injectErr) {
+        // Roll back so we never leave a session marked active with no way to reach it.
+        await sendToBackground({ type: MSG.CANCEL_SESSION });
+        throw injectErr;
+      }
       window.close();
+    } catch (err) {
+      setError(String(err?.message ?? err));
+      setView('error');
+    }
+  }
+
+  async function cancelRecording() {
+    try {
+      await sendToBackground({ type: MSG.CANCEL_SESSION });
+      setError(null);
+      setView('start');
     } catch (err) {
       setError(String(err?.message ?? err));
       setView('error');
@@ -81,9 +108,16 @@ export default function App() {
         </button>
       )}
       {view === 'active' && (
-        <p>Recording in progress. Use the floating Capture button on the page to capture a step, then use the floating bar to Continue to a new part or Export when done.</p>
+        <>
+          <p>
+            Recording in progress — it follows you across tabs and pages. Use the floating Capture button on the
+            page to capture a step, then use the floating bar to Continue to a new part or Export when done.
+          </p>
+          <button onClick={cancelRecording} style={secondaryButtonStyle}>
+            Cancel Recording
+          </button>
+        </>
       )}
-      {view === 'resuming' && <p>Resuming recording on this page…</p>}
       {view === 'stopped' && (
         <>
           <p>Recording stopped.</p>
@@ -92,7 +126,14 @@ export default function App() {
           </button>
         </>
       )}
-      {view === 'error' && <p style={{ color: '#dc2626' }}>Error: {error}</p>}
+      {view === 'error' && (
+        <>
+          <p style={{ color: '#dc2626' }}>Error: {error}</p>
+          <button onClick={cancelRecording} style={secondaryButtonStyle}>
+            Reset
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -107,4 +148,10 @@ const buttonStyle = {
   border: 'none',
   borderRadius: 6,
   cursor: 'pointer',
+};
+
+const secondaryButtonStyle = {
+  ...buttonStyle,
+  marginTop: 8,
+  background: '#64748b',
 };

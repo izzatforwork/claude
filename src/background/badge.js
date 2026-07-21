@@ -4,10 +4,13 @@ export async function setActiveBadge(stepCount) {
   await chrome.action.setTitle({ title: `Recording — ${stepCount} step(s) captured` });
 }
 
-export async function setInterruptedBadge() {
-  await chrome.action.setBadgeText({ text: '!' });
-  await chrome.action.setBadgeBackgroundColor({ color: '#d93025' });
-  await chrome.action.setTitle({ title: 'Recording paused by page navigation — click the icon to resume' });
+// Shown while a recording is active but the current tab can't be scripted
+// (chrome://, the Web Store, etc.) — recording itself keeps running, the
+// floating button just can't appear until the user switches to a normal page.
+export async function setBlockedBadge() {
+  await chrome.action.setBadgeText({ text: '–' });
+  await chrome.action.setBadgeBackgroundColor({ color: '#94a3b8' });
+  await chrome.action.setTitle({ title: 'Recording active — switch to a regular webpage to capture here' });
 }
 
 export async function clearBadge() {

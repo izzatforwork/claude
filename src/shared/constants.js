@@ -1,20 +1,16 @@
 // Message types exchanged between popup / content script / background.
-// Pause/Resume is deliberately NOT here: it's purely local state inside the
-// content script (a gate on whether clicks get forwarded as CAPTURE_STEP),
-// so it never needs to round-trip to the background service worker.
 export const MSG = {
   START_SESSION: 'START_SESSION',
-  RESUME_SESSION: 'RESUME_SESSION',
   GET_STATE: 'GET_STATE',
   CAPTURE_STEP: 'CAPTURE_STEP',
   NEW_PART: 'NEW_PART',
   STOP_SESSION: 'STOP_SESSION',
+  CANCEL_SESSION: 'CANCEL_SESSION',
 };
 
 // Session lifecycle statuses, tracked in the background service worker.
 export const STATUS = {
-  ACTIVE: 'active',
-  INTERRUPTED: 'interrupted', // activeTab lapsed due to navigation/tab close
+  ACTIVE: 'active', // recording follows whichever tab is active; background auto re-injects
   STOPPED: 'stopped', // stopped, export tab opened, awaiting download+cleanup
 };
 
