@@ -63,7 +63,7 @@ export default function App() {
 
   return (
     <div style={{ padding: 16 }}>
-      <h1 style={{ fontSize: 15, margin: '0 0 12px' }}>SOP Screen Snippet Recorder</h1>
+      <h1 style={{ fontSize: 15, margin: '0 0 12px' }}>Screen Snippet Recorder</h1>
       {view === 'loading' && <p>Loading…</p>}
       {view === 'start' && (
         <button onClick={start} style={buttonStyle}>

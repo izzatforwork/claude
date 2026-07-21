@@ -10,9 +10,6 @@ export async function buildDocx({ parts, stepsByPart }) {
       const steps = stepsByPart.get(part.id) ?? [];
       const stepChildren = (await Promise.all(steps.map(buildStepParagraphs))).flat();
       const children = [];
-      if (index === 0) {
-        children.push(new Paragraph({ text: 'Standard Operating Procedure', heading: HeadingLevel.TITLE }));
-      }
       children.push(new Paragraph({ text: part.title, heading: HeadingLevel.HEADING_1 }));
       children.push(...stepChildren);
       return { properties: {}, children };
