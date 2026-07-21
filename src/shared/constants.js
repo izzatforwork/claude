@@ -23,11 +23,6 @@ export const STATUS = {
 export const MAX_LONG_EDGE = 1600;
 export const JPEG_QUALITY = 0.7;
 
-// Highlight circle sizing, in CSS px (scaled by devicePixelRatio at draw time).
-export const CIRCLE_RADIUS_CSS = 18;
-export const CIRCLE_LINE_WIDTH_CSS = 4;
-export const CIRCLE_HALO_EXTRA_CSS = 3;
-
 // chrome.storage.local's documented quota without the (excluded) unlimitedStorage
 // permission. Used only to decide when to warn the user, not enforced by Chrome via this constant.
 export const STORAGE_QUOTA_BYTES = 5242880;

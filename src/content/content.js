@@ -1,6 +1,6 @@
 import { MSG } from '../shared/constants.js';
 import { sendToBackground } from '../shared/messaging.js';
-import { createOverlay } from './overlay.js';
+import { createCaptureButton, createControlBar } from './overlay.js';
 
 // Guards against double-injection: chrome.scripting.executeScript re-runs this
 // whole file in the same isolated-world JS context if called twice on a page
@@ -15,16 +15,41 @@ async function init() {
   const state = await sendToBackground({ type: MSG.GET_STATE });
   if (!state?.meta || state.meta.status !== 'active') return; // nothing to record on this page
 
-  let isPaused = false;
   let stepCount = state.stepCount;
+  let isCapturing = false;
   let currentPart =
     state.parts.find((part) => part.id === state.meta.currentPartId) ?? state.parts[state.parts.length - 1];
 
-  const overlay = createOverlay({
-    onPauseToggle: () => {
-      isPaused = !isPaused;
-      render();
-    },
+  async function handleCapture() {
+    if (isCapturing) return; // debounce: ignore rapid clicks
+    isCapturing = true;
+    try {
+      captureBtn.hide();
+      controlBar.hide();
+
+      // Flush paint by double requestAnimationFrame
+      await new Promise((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(resolve);
+        });
+      });
+
+      const response = await sendToBackground({ type: MSG.CAPTURE_STEP });
+      if (response?.ok) {
+        stepCount = response.stepCount;
+        render(response.storageWarning);
+      }
+    } catch (err) {
+      console.error('Capture failed:', err);
+    } finally {
+      captureBtn.show();
+      controlBar.show();
+      isCapturing = false;
+    }
+  }
+
+  const captureBtn = createCaptureButton({ onCapture: handleCapture });
+  const controlBar = createControlBar({
     onContinue: async () => {
       const res = await sendToBackground({ type: MSG.NEW_PART });
       if (res?.ok) {
@@ -32,32 +57,15 @@ async function init() {
         render();
       }
     },
-    onStop: async () => {
-      document.removeEventListener('click', handleClick, true);
+    onExport: async () => {
       await sendToBackground({ type: MSG.STOP_SESSION });
-      overlay.destroy();
+      captureBtn.destroy();
+      controlBar.destroy();
     },
   });
 
   function render(warning) {
-    overlay.updateState({ partTitle: currentPart?.title ?? '', stepCount, isPaused, warning });
+    controlBar.updateState({ partTitle: currentPart?.title ?? '', stepCount, warning });
   }
   render();
-
-  async function handleClick(e) {
-    if (isPaused) return;
-    if (e.button !== 0) return; // primary/left click only (native `click` already excludes right/middle)
-    if (overlay.root.contains(e.target)) return; // exclude clicks on our own overlay (shadow-including contains)
-
-    const cssX = e.clientX;
-    const cssY = e.clientY;
-    const dpr = window.devicePixelRatio || 1;
-    const response = await sendToBackground({ type: MSG.CAPTURE_STEP, cssX, cssY, dpr });
-    if (response?.ok) {
-      stepCount = response.stepCount;
-      render(response.storageWarning);
-    }
-  }
-
-  document.addEventListener('click', handleClick, true);
 }

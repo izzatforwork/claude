@@ -5,6 +5,13 @@ A Chrome extension that captures a screenshot on every click during a recording 
 highlights the click point, and exports the full sequence into a .docx SOP document — so I
 can create step-by-step SOP documents just by clicking through a workflow.
 
+## Pre-flight checklist
+- Configure Git identity before the first commit:
+  - `git config --global user.name "Your Name"`
+  - `git config --global user.email "you@example.com"`
+- Confirm Git remote/auth method and understand what `git push` does before relying on it.
+- If using Claude Code or auto-edit helpers, verify that file creation permissions are enabled.
+
 ## User flow
 1. User clicks the extension icon, presses "Start Recording"
 2. While recording, every click on the page triggers a screenshot capture with a highlight

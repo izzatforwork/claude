@@ -1,12 +1,45 @@
 import overlayCss from './overlay.css';
 
-// Builds the floating recording-control bar inside a Shadow DOM, isolated from
-// the host page's CSS. Returns { root, updateState, destroy }.
-export function createOverlay({ onPauseToggle, onContinue, onStop }) {
+// Creates a standalone floating capture button inside a Shadow DOM.
+// Returns { root, hide(), show(), destroy() }.
+export function createCaptureButton({ onCapture }) {
   const host = document.createElement('div');
-  host.id = 'sop-recorder-overlay-host';
-  // "all: initial" strips any inherited/page CSS from the host element itself;
-  // the explicit properties after it in the same rule win the cascade.
+  host.id = 'sop-capture-btn-host';
+  host.style.cssText = 'all: initial; position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 2147483647;';
+
+  const shadow = host.attachShadow({ mode: 'open' });
+  const style = document.createElement('style');
+  style.textContent = overlayCss;
+  shadow.appendChild(style);
+
+  const button = document.createElement('button');
+  button.textContent = 'Capture';
+  button.style.cssText = 'padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;';
+  button.addEventListener('click', onCapture);
+  shadow.appendChild(button);
+
+  document.documentElement.appendChild(host);
+
+  function hide() {
+    host.style.display = 'none';
+  }
+
+  function show() {
+    host.style.display = '';
+  }
+
+  function destroy() {
+    host.remove();
+  }
+
+  return { root: host, hide, show, destroy };
+}
+
+// Creates a floating control bar (Continue to Part 2 + Export buttons) inside a Shadow DOM.
+// Returns { root, updateState(), hide(), show(), destroy() }.
+export function createControlBar({ onContinue, onExport }) {
+  const host = document.createElement('div');
+  host.id = 'sop-control-bar-host';
   host.style.cssText = 'all: initial; position: fixed; bottom: 16px; right: 16px; z-index: 2147483647;';
 
   const shadow = host.attachShadow({ mode: 'open' });
@@ -19,35 +52,37 @@ export function createOverlay({ onPauseToggle, onContinue, onStop }) {
   bar.innerHTML = `
     <span class="sop-status" data-role="status"></span>
     <span class="sop-warning" data-role="warning" hidden>Storage almost full</span>
-    <button data-role="pause" type="button">Pause</button>
     <button data-role="continue" type="button">Continue to Part 2</button>
-    <button data-role="stop" type="button" class="sop-stop">Stop</button>
+    <button data-role="export" type="button" class="sop-stop">Export</button>
   `;
   shadow.appendChild(bar);
 
   const statusEl = bar.querySelector('[data-role="status"]');
   const warningEl = bar.querySelector('[data-role="warning"]');
-  const pauseBtn = bar.querySelector('[data-role="pause"]');
   const continueBtn = bar.querySelector('[data-role="continue"]');
-  const stopBtn = bar.querySelector('[data-role="stop"]');
+  const exportBtn = bar.querySelector('[data-role="export"]');
 
-  pauseBtn.addEventListener('click', onPauseToggle);
   continueBtn.addEventListener('click', onContinue);
-  stopBtn.addEventListener('click', onStop);
+  exportBtn.addEventListener('click', onExport);
 
   document.documentElement.appendChild(host);
 
-  function updateState({ partTitle, stepCount, isPaused, warning }) {
-    statusEl.textContent = isPaused
-      ? `⏸ Paused — ${partTitle} — ${stepCount} step(s)`
-      : `● Recording — ${partTitle} — ${stepCount} step(s)`;
-    pauseBtn.textContent = isPaused ? 'Resume' : 'Pause';
+  function updateState({ partTitle, stepCount, warning }) {
+    statusEl.textContent = `● Recording — ${partTitle} — ${stepCount} step(s)`;
     warningEl.hidden = !warning;
+  }
+
+  function hide() {
+    host.style.display = 'none';
+  }
+
+  function show() {
+    host.style.display = '';
   }
 
   function destroy() {
     host.remove();
   }
 
-  return { root: host, updateState, destroy };
+  return { root: host, updateState, hide, show, destroy };
 }

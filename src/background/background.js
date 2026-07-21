@@ -4,6 +4,8 @@ import * as storage from '../shared/storage.js';
 import { captureAndComposite } from './capture.js';
 import { setActiveBadge, setInterruptedBadge, clearBadge } from './badge.js';
 
+let exportTabId = null; // Track the ID of the currently-open export tab
+
 registerMessageRouter({
   [MSG.START_SESSION]: handleStartSession,
   [MSG.RESUME_SESSION]: handleResumeSession,
@@ -52,12 +54,12 @@ async function handleGetState() {
   return { meta, parts, stepCount: stepIndex.length };
 }
 
-async function handleCaptureStep({ cssX, cssY, dpr }, sender) {
+async function handleCaptureStep(message, sender) {
   const meta = await storage.getMeta();
   if (!meta || meta.status !== STATUS.ACTIVE) return { ignored: true };
 
   const windowId = sender.tab?.windowId;
-  const { imageDataUrl, width, height } = await captureAndComposite(windowId, cssX, cssY, dpr);
+  const { imageDataUrl, width, height } = await captureAndComposite(windowId);
 
   const stepIndex = await storage.getStepIndex();
   const order = stepIndex.filter((entry) => entry.partId === meta.currentPartId).length + 1;
@@ -69,9 +71,6 @@ async function handleCaptureStep({ cssX, cssY, dpr }, sender) {
     width,
     height,
     caption: '[Add description]',
-    clickCssX: cssX,
-    clickCssY: cssY,
-    dpr,
     createdAt: Date.now(),
   };
   await storage.setStep(step);
@@ -106,7 +105,23 @@ async function handleStopSession() {
   meta.updatedAt = Date.now();
   await storage.setMeta(meta);
   await clearBadge();
-  await chrome.tabs.create({ url: chrome.runtime.getURL(`export.html?session=${meta.id}`) });
+
+  // Check if export tab still exists; reuse if so, otherwise create new one
+  if (exportTabId) {
+    try {
+      await chrome.tabs.get(exportTabId);
+      // Tab exists, focus it
+      await chrome.tabs.update(exportTabId, { active: true });
+      return { ok: true };
+    } catch (err) {
+      // Tab doesn't exist, clear ID and create new one
+      exportTabId = null;
+    }
+  }
+
+  // Create new export tab
+  const newTab = await chrome.tabs.create({ url: chrome.runtime.getURL(`export.html?session=${meta.id}`) });
+  exportTabId = newTab.id;
   return { ok: true };
 }
 
@@ -132,4 +147,11 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   meta.updatedAt = Date.now();
   await storage.setMeta(meta);
   await setInterruptedBadge();
+});
+
+// Detect when export tab is closed
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (tabId === exportTabId) {
+    exportTabId = null;
+  }
 });

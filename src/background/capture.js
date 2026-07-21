@@ -1,44 +1,14 @@
-import {
-  MAX_LONG_EDGE,
-  JPEG_QUALITY,
-  CIRCLE_RADIUS_CSS,
-  CIRCLE_LINE_WIDTH_CSS,
-  CIRCLE_HALO_EXTRA_CSS,
-} from '../shared/constants.js';
+import { MAX_LONG_EDGE, JPEG_QUALITY } from '../shared/constants.js';
 
-// Captures the current viewport, draws a red-ring highlight at the click point,
-// then downsizes/compresses to a JPEG data URL. Runs entirely in the background
-// service worker via OffscreenCanvas - no chrome.offscreen permission needed,
-// and no round-trip through the content script.
-export async function captureAndComposite(windowId, cssX, cssY, dpr) {
+// Captures the current visible tab, resizes to max long edge, and compresses to JPEG.
+export async function captureAndComposite(windowId) {
   const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
   const captureBlob = await (await fetch(dataUrl)).blob();
   const bitmap = await createImageBitmap(captureBlob);
 
-  // captureVisibleTab returns physical-pixel resolution (CSS size * dpr), while
-  // click coordinates are CSS px - this multiplication is the DPR correction.
-  const circleX = Math.round(cssX * dpr);
-  const circleY = Math.round(cssY * dpr);
-  const radius = CIRCLE_RADIUS_CSS * dpr;
-  const lineWidth = CIRCLE_LINE_WIDTH_CSS * dpr;
-  const haloLineWidth = lineWidth + CIRCLE_HALO_EXTRA_CSS * dpr;
-
   const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
   const ctx = canvas.getContext('2d');
   ctx.drawImage(bitmap, 0, 0);
-
-  // White halo first for legibility on dark backgrounds, red ring on top.
-  ctx.beginPath();
-  ctx.arc(circleX, circleY, radius, 0, Math.PI * 2);
-  ctx.lineWidth = haloLineWidth;
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(circleX, circleY, radius, 0, Math.PI * 2);
-  ctx.lineWidth = lineWidth;
-  ctx.strokeStyle = '#FF0000';
-  ctx.stroke();
 
   const scale = Math.min(1, MAX_LONG_EDGE / Math.max(canvas.width, canvas.height));
   const outWidth = Math.round(canvas.width * scale);
