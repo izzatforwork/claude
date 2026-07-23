@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**SOP Screen Snippet Recorder** is a Manifest V3 Chrome extension that records click-through workflows and exports them as step-by-step SOP `.docx` documents. Users click through a process, every click captures a screenshot with a red highlight at the click point, and the full sequence exports to Word with editable captions and part/section titles.
+**Screen Snippet Recorder** is a Manifest V3 Chrome extension that records click-through workflows and exports them as step-by-step `.docx` documents. Users manually trigger captures via a floating "Capture" button on each step, resulting in a screenshot; the full sequence exports to Word with editable captions and part/section titles. Multi-part sessions are supported (e.g., "Part 1: Login", "Part 2: Dashboard") without stopping the recording.
 
 ## Architecture
 
@@ -20,8 +20,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **storage.js**: Promise wrappers around `chrome.storage.local`. Defines the storage shape once; used by both background writes and export reads.
 
 ### Key Design Decisions
-- **Manual capture, no click detection**: There is no automatic click listener. A floating "Capture" button is the only trigger for `CAPTURE_STEP`; this removed the earlier Pause/Resume feature entirely (nothing to pause when nothing fires automatically).
-- **Tab-following via `host_permissions`**: The extension requests `<all_urls>` host permissions (not just `activeTab`) specifically so recording can follow the user across tabs and across full cross-site navigations without a fresh toolbar click each time. `background.js` listens for `chrome.tabs.onActivated` and `chrome.tabs.onUpdated` (status `complete`) and re-injects `content.js` into whatever tab is currently active, as long as the session is `ACTIVE`. Chrome-internal pages (`chrome://`, the Web Store, etc.) can never be scripted regardless of permissions — recording keeps running, but the toolbar badge shows a "blocked" state (grey `–`) until the user switches to a normal page.
+
+**Manual Capture (Pivot from Original Design)**
+- Originally scoped as auto-click-detection with automatic screenshot on every click. **Actual implementation**: a floating "Capture" button that users click to manually capture each step. This was a mid-project pivot to simplify the UX and avoid accidental captures.
+- No highlight circle is drawn at the click point (original brief included this; removed along with auto-detection).
+- No Pause/Resume feature (nothing to pause when capture is manual).
+
+**Tab-Following via `host_permissions` (Pivot from Original Permissions Model)**
+- Originally scoped with `activeTab` permissions only (narrowest scope). **Actual implementation**: uses `host_permissions: ["<all_urls>"]` so recording can follow the user across tabs and across full cross-site navigations without restarting.
+- `background.js` listens for `chrome.tabs.onActivated` and `chrome.tabs.onUpdated` (status `complete`) and automatically re-injects `content.js` into whichever tab is currently active (as long as the session is `ACTIVE`). No user gesture required.
+- Chrome-internal pages (`chrome://`, Web Store, etc.) can never be scripted regardless of permissions — recording keeps running underneath, but the toolbar badge shows "blocked" (grey `–`) until the user switches to a scriptable page.
 - **Recovery from stuck states**: If injection fails outright when starting a recording (e.g. the user's active tab was a `chrome://` page), the popup rolls the session back via `CANCEL_SESSION` instead of leaving a session marked active with no reachable UI. The popup's "active" view also always shows a "Cancel Recording" button so the user can self-recover without touching DevTools if the floating button ever fails to appear.
 - **No caption editing in-extension**: Captions are placeholders in the `.docx` file — users edit them directly in Word after export, not in the extension.
 - **Storage quota strategy**: Deliberately staying under 5 MB (no `unlimitedStorage` permission) for security. Accepted practical ceiling of ~20–60 steps per session depending on screenshot compression. Warn users at 80% quota.
@@ -75,7 +83,16 @@ See `src/shared/storage.js` for the definitive API.
 
 ## Content Script & Overlay
 
-- **overlay.js** / **overlay.css**: Floating UI with Pause/Resume, Continue to Part 2, and Stop buttons. Injected into the page when recording is active. Survives `pause` (local gate; no message sent), but must be re-injected after navigation.
+- **overlay.js** / **overlay.css**: Floating UI with "Capture" button (manual screenshot trigger) and "Continue to Part N" / "Export" controls. Injected into the page when a recording session is active. Re-injected automatically whenever the user switches tabs or navigates (via background service worker's tab-following logic).
+
+## Testing & Verification
+
+**Critical Constraint**: Chrome extensions cannot be executed or tested directly by Claude Code in this environment. All verification requires manually loading the extension unpacked in a real browser. Code review and static analysis can catch some issues, but integration bugs (tab-following, overlay injection, storage persistence, export workflow) only surface during manual testing.
+
+When fixing issues:
+- Distinguish between "verified by execution" (user tested in browser) and "verified by code review" (traced the logic path). Don't blur the two.
+- Pair code fixes with immediate workarounds the user can try, rather than only handing over the fix and waiting for testing feedback.
+- Expect that some bugs may only show up during user testing despite confident code analysis.
 
 ## Debugging Tips
 
@@ -83,10 +100,13 @@ See `src/shared/storage.js` for the definitive API.
 - **Message tracing**: Add `console.log` in messaging.js handlers or use `chrome.runtime.onMessage.addListener` in DevTools to trace message flow.
 - **Storage quota**: Call `chrome.storage.local.getBytesInUse(null)` in DevTools to see current usage.
 - **Tab-following edge case**: Simulate by starting a recording, then switching to a different tab or navigating to a different site. The floating Capture button should reappear automatically without clicking the toolbar icon. On a `chrome://` tab, the badge should show the grey "blocked" indicator instead.
+- **Recovery flow**: Intentionally start a recording on a `chrome://` page to verify the popup shows "Cancel Recording" button and gracefully rolls back. The session should be clearable without manual storage deletion.
 
 ## Constraints & Limitations
 
-- **MV3 only**: No `eval()`, no background page (service worker with limited lifetime). Uses `host_permissions: ["<all_urls>"]` (not just `activeTab`) so recording can follow the user across tabs/sites — a deliberate trade-off of broader permission scope for that UX; re-evaluate if this needs tightening (e.g. optional permissions) before a public listing.
-- **No downloads permission**: Export must open a new tab with a download link (handled by the `docx` package).
-- **~20–60 steps per session**: Storage quota limit (5 MB). Exceeding it would require IndexedDB, which wasn't chosen to keep scope tight.
-- **No in-extension caption editing**: Captions are Word placeholders; users edit after export.
+- **MV3 only**: No `eval()`, no background page (service worker with limited lifetime).
+- **`host_permissions: ["<all_urls>"]`**: Broadly scoped permissions (not `activeTab`-only) needed to support tab-following. This is a deliberate trade-off — re-evaluate if tightening is needed (e.g., optional permissions) before a public listing on the Web Store.
+- **No downloads permission**: Export must open a new tab with a download link (handled by the `docx` npm package).
+- **~20–60 steps per session**: Storage quota limit (5 MB, no `unlimitedStorage` permission by design). Exceeding it would require IndexedDB; not included to keep scope tight.
+- **No in-extension caption editing**: Part titles can be customized on the export screen; captions are Word placeholders, edited directly in the downloaded `.docx`.
+- **Chrome-internal pages not scriptable**: Recording can continue running on `chrome://` pages, but the UI (floating overlay) cannot be injected. Badge shows "blocked" state; recording resumes normally when user switches back to a normal page.
