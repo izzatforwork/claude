@@ -152,3 +152,65 @@
 
 ### Notes
 - User explicitly reasoned that the debugging-protocol fix needed to live in global CLAUDE.md rather than just a log file, since POSTMORTEMS.md isn't re-read every session but CLAUDE.md is — worth keeping in mind for future closures when deciding where a behavioral fix actually belongs vs. just documenting it historically
+
+## Session 2026-07-23
+
+### Timeline
+- Bug-fix round 3: user reported 3 new bugs found via daily use since the 2026-07-22 closure (overlay stuck after redirect, stale overlay in other tabs after export, no in-page cancel); traced root causes from code, reviewed evidence with the user before implementing, fixed all three, committed and pushed
+- Feature request: added an editable Document Title field to the export screen (used for filename + in-doc title page) and removed the literal `[Add description]` placeholder from exported captions (left blank instead), committed and pushed
+- Ran `/help`-adjacent TypeScript preference request: verified the existing standing decision was "plain JS, no framework" (not unset), superseded it with a TypeScript-default decision per user confirmation, updated global CLAUDE.md
+- Ran project-closure skill again: reviewed git state, moved the existing `project-complete` tag, pushed; found no blocker/standing-decision conflicts; collected feedback that "Completed" had been marked before real day-to-day use surfaced these 3 bugs
+- Mid-closure, discovered `~/.claude/development` (where DECISIONS.md/POSTMORTEMS.md/OPEN-ITEMS.md/PROJECTS.md/template live) is its own separate git repo with zero commits, no remote, and a staged `.env.test` file containing dummy/test credentials alongside an unfinished pre-commit secrets-scanning setup — flagged this to the user rather than committing into it
+- Per user's direction, wrote this closure's record into project-1's own SESSION-LOG.md and master-prompt.md instead of committing to the development/ repo; left development/ untouched (edits to its files remain uncommitted on disk, pending the user sorting that repo separately)
+
+### Prompts
+1. "run closure skill" (bug review) — re-entered after "go into project 1. got few more update to run. before execution, review the plan with me"
+2. "* In a single tab, whenever redirected to a different URL, the capture STOPS and reset [HIGH PRIORITY] / * If opened multiple tab during a recording process... floating button is still present [LOW PRIORITY] / * If recording started, there is no way to cancel the recording."
+3. "did you found the root cause? did you gather evidence before implementing fixes?"
+4. "push to git"
+5. "push it too" (SESSION-LOG.md + master-prompt.md pending from a prior session)
+6. "1. add document title as a placeholder in the same screen as to rename step 1 and step 2... 2. When the doc is downloaded, i can see [add description] - this is to be remove"
+7. "1. good, rename both filename and in-doc title heading / 2. keep a clean spot where it is possible to write caption in word"
+8. "add my preference to use typescript into main claude MD. before updating, verify if current preference is set to Javascript"
+9. "run closure skill"
+10. Answered closure prompts: move tag (yes), push (yes), OPEN items: "001 - fix and can be ignored / 002 - fix and can be ignored / 006 - fix and can be ignored / 008 - OPEN / 009-010 - OPEN / this project - fix and can be ignored", skip Semgrep, "ok" (routing approval), "ok" (entry approval), "write logs into project 1 log files" / "leave local-only for now" (in response to the development/ repo discovery), "Completed" (final status)
+
+### MD files touched
+- Modified: `src/background/background.js`, `src/content/content.js`, `src/content/overlay.css`, `src/content/overlay.js`, `src/shared/constants.js` — bug-fix round 3 (redirect re-injection, SESSION_ENDED broadcast, in-page Cancel button)
+- Modified: `src/export/export.html`, `src/export/export.js`, `src/export/docxBuilder.js`, `src/background/background.js`, `src/shared/constants.js` — Document Title field + blanked placeholder caption
+- Modified: `CLAUDE.md` (project) — added "Bug Fixes (2026-07-23 session)" section
+- Modified: `CLAUDE.md` (global, `~/.claude/CLAUDE.md`) — added "Language Preference" (TypeScript default) section
+- Attempted-but-held-back: `DECISIONS.md`, `POSTMORTEMS.md`, `OPEN-ITEMS.md`, `PROJECTS.md`, `templates/NEW_PROJECT.md` (all in `~/.claude/development/`) — edited on disk with this closure's findings, but NOT committed/pushed; that repo turned out to have zero prior commits, no remote, and an unrelated staged secrets-test file, so committing was deferred per user's instruction to record here instead
+- Modified: `master-prompt.md` (project) — added "Post-launch note (2026-07-23 closure)" section
+- Modified: `SESSION-LOG.md` — appended this entry
+
+### Summary
+
+**Bug-fix round 3 (from daily use, post-2026-07-22-closure):**
+- **Overlay stuck after a redirect (HIGH)**: root cause traced to `background.js`'s `chrome.tabs.onUpdated` listener requiring `changeInfo.status === 'complete'`, which silently ignores the `changeInfo.url`-only events Chrome fires for redirects/History-API navigation. Fixed to react to either signal. Labeled unverified-by-execution (can't run Chrome in this environment) and given to the user with explicit repro steps to confirm.
+- **Stale overlay in other tabs after export (LOW)**: found that `sendToTab()` existed in `messaging.js` but was never called anywhere in the codebase. `background.js` now tracks injected tab IDs and broadcasts a new `SESSION_ENDED` message on `STOP_SESSION`/`CANCEL_SESSION`; `content.js` now listens and tears its overlay down.
+- **No way to cancel mid-recording**: popup already had a working Cancel button, but the floating in-page control bar (the surface actually visible while recording) only had Continue/Export. Added a Cancel button to `overlay.js`'s control bar, wired to `CANCEL_SESSION` with a confirm prompt.
+- Build verified clean (`npm run build`) after each change. Commit `36d50c6` — pushed to origin/main.
+
+**Document Title + caption placeholder feature:**
+- Added a "Document Title" input on the export screen's Screen 1 (same screen as the Part-title renames), defaulting to the old date-based name.
+- Wired the title into both the downloaded filename (sanitized for filesystem-invalid characters) and a new leading title-page section in the `.docx` via `docx`'s `HeadingLevel.TITLE` + core-properties `title`.
+- Replaced the literal `[Add description]` caption placeholder with a blank paragraph in the export, so there's still a clean spot to type a caption directly in Word, but the placeholder text no longer shows up.
+- Commit `4ff157c` — pushed to origin/main.
+
+**TypeScript preference:**
+- Checked global CLAUDE.md (no existing JS/TS statement) and `development/logs/DECISIONS.md` (found an ACTIVE "plain JS/Node, no framework" decision) before touching anything.
+- Per user confirmation, marked that decision SUPERSEDED and added a new ACTIVE "TypeScript over plain JavaScript, future projects only" decision; added a "Language Preference" section to global CLAUDE.md; saved a memory record. Project-1 itself stays plain JS (no retroactive conversion).
+
+**Closure run 2 (2026-07-23):**
+- Committed + moved the `project-complete` git tag to the latest commit; pushed branch + tag.
+- No blocker noted on PROJECTS.md's row; standing-decisions review found no new flags (docx-over-PDF and the unverified-fix-labeling decision both held again this round).
+- Open items: closed OI-001 (git init compliance), OI-002 (git push confusion), OI-006 (Figma MCP) per user confirmation these have held with no recurrence; left OI-008, OI-009, OI-010 OPEN as instructed; filed new OI-011 ("Completed" status for manual-only-verification projects gets reopened by real daily-use bugs — happened twice on Project 1 now).
+- Skipped the optional Semgrep security audit (simple client-side extension, no auth/DB/server API).
+- Feedback: project was originally marked Completed before real daily use surfaced the 3 bugs above — routed to a new POSTMORTEMS.md entry, a new NEW_PROJECT.md pre-flight checklist item, and OI-011.
+- **Discovered mid-closure**: `~/.claude/development` is its own git repo, separate from project-1's, with zero commits ever, no remote, and an untracked/staged secrets-scanning setup (`.pre-commit-config.yaml`, `.secrets.baseline`, `.pre-commit-rejection-log.md`) plus a staged `.env.test` with dummy credentials. Flagged this to the user instead of silently committing into it. Per their direction, the closure record was written into project-1's own `SESSION-LOG.md`/`master-prompt.md` instead; the global log-file edits remain uncommitted on disk in `development/`, to be sorted as a separate task.
+- Final status: Completed (PROJECTS.md row updated with a note on the re-closure and what changed).
+
+### Notes
+- The `development/` repo situation is a standing loose end — it has no commit history and no remote, plus a leftover secrets-scanning test fixture that should be reviewed (not committed as-is) before that repo is ever pushed anywhere.
+- Second time this exact project has been marked Completed then reopened by real usage — now tracked as OI-011 so the pattern itself (not just this instance) gets watched across future manual-only-verification projects.

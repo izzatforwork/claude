@@ -85,3 +85,32 @@ similarly untestable project (browser extension, mobile app, hardware-adjacent):
 - This is now a standing "Debugging Protocol" in global CLAUDE.md — it should already
   be in effect for any rebuild, but worth restating here since it's the reason this
   project ran longer than its actual scope warranted.
+
+## Post-launch note (2026-07-23 closure)
+
+Marked "Completed" on 2026-07-22, then reopened after real daily use surfaced 3 more
+bugs the original manual test pass and code review hadn't caught:
+
+- **Overlay stuck after a redirect (HIGH)**: `background.js`'s tab-following listener
+  only re-injected on `changeInfo.status === 'complete'`, silently ignoring the
+  `changeInfo.url`-only events Chrome fires for redirects/History-API navigation. Now
+  reacts to either signal. Flagged as unverified-by-execution at the time (this
+  environment can't run Chrome) — confirm this actually holds if it recurs.
+- **Stale overlay in other tabs after export (LOW)**: `sendToTab()` had been written in
+  `messaging.js` but never actually called anywhere. Background now tracks injected
+  tab IDs and broadcasts a `SESSION_ENDED` message on stop/cancel so every tab's
+  overlay tears down, not just the one that triggered export.
+- **No way to cancel mid-recording without reopening the popup**: the popup already had
+  a working Cancel button, but the floating in-page control bar — the surface actually
+  in view while recording — only had Continue/Export. Added a Cancel button there too.
+
+Also shipped a feature request from real use: an editable **Document Title** field on
+the export screen (used for both the `.docx` filename and an in-doc title page), and
+removed the literal `[Add description]` placeholder text from exported captions
+(left blank instead, so there's still a clean spot to type into in Word).
+
+**Lesson**: for a project type Claude can't execute-test, treat "Completed" as
+"code-review complete, pending field use," not a final bug-free state — see the new
+closure finding in `POSTMORTEMS.md` and `NEW_PROJECT.md`'s pre-flight checklist. A
+follow-up bug round after real usage is normal for this project type, not a sign the
+original closure was wrong.
