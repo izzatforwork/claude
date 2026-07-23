@@ -46,10 +46,12 @@
       #error {
         color: #dc2626;
       }
-      .part-title-input {
+      .part-title-input,
+      .doc-title-input {
         margin-bottom: 20px;
       }
-      .part-title-input label {
+      .part-title-input label,
+      .doc-title-input label {
         display: block;
         font-weight: 600;
         margin-bottom: 6px;
@@ -58,9 +60,13 @@
     </style>
   </head>
   <body>
-    <!-- Screen 1: Enter Part Titles -->
+    <!-- Screen 1: Document + Part Titles -->
     <div id="screen-titles" class="screen active">
-      <h1>Enter Part Titles</h1>
+      <h1>Document Details</h1>
+      <div class="doc-title-input">
+        <label for="doc-title-input">Document Title</label>
+        <input type="text" id="doc-title-input" />
+      </div>
       <div id="titles-form"></div>
       <button id="continue-btn">Continue to Download</button>
       <p id="error"></p>

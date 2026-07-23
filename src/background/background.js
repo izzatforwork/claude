@@ -1,4 +1,4 @@
-import { MSG, STATUS, STORAGE_WARN_RATIO } from '../shared/constants.js';
+import { MSG, STATUS, STORAGE_WARN_RATIO, DEFAULT_STEP_CAPTION } from '../shared/constants.js';
 import { registerMessageRouter, sendToTab } from '../shared/messaging.js';
 import * as storage from '../shared/storage.js';
 import { captureAndComposite } from './capture.js';
@@ -75,7 +75,7 @@ async function handleCaptureStep(message, sender) {
     imageDataUrl,
     width,
     height,
-    caption: '[Add description]',
+    caption: DEFAULT_STEP_CAPTION,
     createdAt: Date.now(),
   };
   await storage.setStep(step);

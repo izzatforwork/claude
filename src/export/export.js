@@ -4,6 +4,7 @@ import { buildDocx } from './docxBuilder.js';
 
 const screenTitles = document.getElementById('screen-titles');
 const screenDownload = document.getElementById('screen-download');
+const docTitleInput = document.getElementById('doc-title-input');
 const titlesForm = document.getElementById('titles-form');
 const continueBtn = document.getElementById('continue-btn');
 const summaryEl = document.getElementById('summary');
@@ -11,6 +12,17 @@ const downloadBtn = document.getElementById('download-btn');
 const errorEl = document.getElementById('error');
 
 let meta, parts, steps, stepsByPart;
+
+function defaultDocTitle() {
+  return `Recording - ${new Date().toISOString().slice(0, 10)}`;
+}
+
+// Word document titles and filenames both reject different sets of special
+// characters; strip anything either would choke on rather than trying to
+// keep two separate sanitizers in sync.
+function sanitizeForFilename(title) {
+  return title.replace(/[\\/:*?"<>|]/g, '-').trim() || defaultDocTitle();
+}
 
 init();
 
@@ -36,6 +48,7 @@ async function init() {
     stepsByPart = stepsByPartTemp;
 
     // Show Screen 1: Title input fields
+    docTitleInput.value = defaultDocTitle();
     renderTitleInputs();
     continueBtn.addEventListener('click', handleContinue);
   } catch (err) {
@@ -63,7 +76,8 @@ function renderTitleInputs() {
 }
 
 async function handleContinue() {
-  // Collect custom titles from inputs
+  // Collect the document title and custom part titles from inputs
+  const documentTitle = docTitleInput.value.trim() || defaultDocTitle();
   const customParts = parts.map((part) => {
     const input = document.getElementById(`part-title-${part.id}`);
     return {
@@ -78,15 +92,15 @@ async function handleContinue() {
 
   summaryEl.textContent = `${customParts.length} part(s), ${steps.length} step(s) ready to export.`;
   downloadBtn.disabled = false;
-  downloadBtn.addEventListener('click', () => handleDownload(customParts, stepsByPart));
+  downloadBtn.addEventListener('click', () => handleDownload(documentTitle, customParts, stepsByPart));
 }
 
-async function handleDownload(customParts, stepsByPart) {
+async function handleDownload(documentTitle, customParts, stepsByPart) {
   downloadBtn.disabled = true;
   downloadBtn.textContent = 'Building document…';
   errorEl.textContent = '';
   try {
-    const doc = await buildDocx({ parts: customParts, stepsByPart });
+    const doc = await buildDocx({ title: documentTitle, parts: customParts, stepsByPart });
     const blob = await Packer.toBlob(doc);
     const url = URL.createObjectURL(blob);
 
@@ -95,7 +109,7 @@ async function handleDownload(customParts, stepsByPart) {
     // avoids Chrome's multi-download throttling that auto-triggered downloads hit.
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Recording - ${new Date().toISOString().slice(0, 10)}.docx`;
+    a.download = `${sanitizeForFilename(documentTitle)}.docx`;
     document.body.appendChild(a);
     a.click();
     a.remove();

@@ -25,6 +25,10 @@ export const JPEG_QUALITY = 0.7;
 export const STORAGE_QUOTA_BYTES = 5242880;
 export const STORAGE_WARN_RATIO = 0.8;
 
+// Default step caption: a Word-editable placeholder, not meant to survive into
+// the exported doc as literal text - docxBuilder blanks it out on export.
+export const DEFAULT_STEP_CAPTION = '[Add description]';
+
 // Storage key helpers - kept centralized so background and export read/write identically.
 export const KEY_META = 'sop_session_meta';
 export const KEY_PARTS = 'sop_session_parts';
