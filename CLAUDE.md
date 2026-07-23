@@ -102,6 +102,26 @@ When fixing issues:
 - **Tab-following edge case**: Simulate by starting a recording, then switching to a different tab or navigating to a different site. The floating Capture button should reappear automatically without clicking the toolbar icon. On a `chrome://` tab, the badge should show the grey "blocked" indicator instead.
 - **Recovery flow**: Intentionally start a recording on a `chrome://` page to verify the popup shows "Cancel Recording" button and gracefully rolls back. The session should be clearable without manual storage deletion.
 
+## Bug Fixes (2026-07-23 session)
+
+Three bugs reported from manual testing; fixed with the following root causes/changes:
+
+- **Overlay stuck after redirect (HIGH)**: `background.js`'s `chrome.tabs.onUpdated` listener only
+  re-injected the content script when `changeInfo.status === 'complete'`. Per Chrome's `tabs.onUpdated`
+  behavior, redirects and same-document/History-API navigations can fire with only `changeInfo.url` set
+  and no `status` field, which the old check silently ignored — leaving the tab with a dead overlay until
+  the user manually switched tabs. Now reacts to either signal. **Root cause identified by static code
+  tracing, not confirmed by execution** (this project cannot run in a real browser from Claude Code) —
+  verify by starting a recording, navigating a tab through a URL that redirects (HTTP redirect or
+  `window.location.href` reassignment), and confirming the floating Capture button reappears.
+- **Overlay persists in other tabs after export (LOW)**: `sendToTab()` in `messaging.js` existed but was
+  never called anywhere in the codebase — background never told other tabs a session had ended.
+  `background.js` now tracks injected tab IDs and broadcasts a `SESSION_ENDED` message on
+  `STOP_SESSION`/`CANCEL_SESSION`; `content.js` now listens for it and tears down its overlay.
+- **No way to cancel mid-recording**: The popup's `Cancel Recording` button already existed, but the
+  floating in-page control bar (the primary UI while recording) only had Continue/Export. Added a Cancel
+  button to `overlay.js`'s control bar, wired to `CANCEL_SESSION` with a confirm prompt.
+
 ## Constraints & Limitations
 
 - **MV3 only**: No `eval()`, no background page (service worker with limited lifetime).

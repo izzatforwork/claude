@@ -1,10 +1,22 @@
 import { MSG, STATUS, STORAGE_WARN_RATIO } from '../shared/constants.js';
-import { registerMessageRouter } from '../shared/messaging.js';
+import { registerMessageRouter, sendToTab } from '../shared/messaging.js';
 import * as storage from '../shared/storage.js';
 import { captureAndComposite } from './capture.js';
 import { setActiveBadge, setBlockedBadge, clearBadge } from './badge.js';
 
 let exportTabId = null; // Track the ID of the currently-open export tab
+
+// Every tab we know has (or very recently had) the overlay injected, so that
+// when a session ends we can tell every one of them to tear the overlay down
+// (otherwise only the tab that clicked Export/Cancel gets cleaned up, and any
+// other tab open during the recording keeps showing a stale floating button).
+const injectedTabIds = new Set();
+
+async function notifyAllInjectedTabsSessionEnded() {
+  const tabIds = [...injectedTabIds];
+  injectedTabIds.clear();
+  await Promise.all(tabIds.map((tabId) => sendToTab(tabId, { type: MSG.SESSION_ENDED })));
+}
 
 registerMessageRouter({
   [MSG.START_SESSION]: handleStartSession,
@@ -29,12 +41,14 @@ async function handleStartSession({ tabId }) {
     updatedAt: now,
   });
   await clearBadge();
+  injectedTabIds.add(tabId); // popup injects into this tab right after START_SESSION resolves
   return { ok: true };
 }
 
 async function handleCancelSession() {
   await storage.clearSession();
   await clearBadge();
+  await notifyAllInjectedTabsSessionEnded();
   return { ok: true };
 }
 
@@ -96,6 +110,7 @@ async function handleStopSession() {
   meta.updatedAt = Date.now();
   await storage.setMeta(meta);
   await clearBadge();
+  await notifyAllInjectedTabsSessionEnded();
 
   const exportUrl = chrome.runtime.getURL(`export.html?session=${meta.id}`);
 
@@ -161,6 +176,7 @@ async function maybeInject(tabId) {
     return; // page not scriptable for some other reason (e.g. still loading); leave badge as-is
   }
 
+  injectedTabIds.add(tabId);
   meta.lastActiveTabId = tabId;
   meta.updatedAt = Date.now();
   await storage.setMeta(meta);
@@ -171,7 +187,13 @@ async function maybeInject(tabId) {
 chrome.tabs.onActivated.addListener(({ tabId }) => maybeInject(tabId));
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status !== 'complete' || !tab.active) return;
+  // Full navigations report status 'complete'. Redirects and same-document
+  // (History API) navigations often only report a `url` change with no status
+  // field at all - the old check (status-only) silently ignored those, which
+  // left the overlay dead after a redirect until the user manually switched
+  // tabs. React to either signal.
+  if (changeInfo.status !== 'complete' && !changeInfo.url) return;
+  if (!tab.active) return;
   maybeInject(tabId);
 });
 
@@ -180,4 +202,5 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   if (tabId === exportTabId) {
     exportTabId = null;
   }
+  injectedTabIds.delete(tabId);
 });

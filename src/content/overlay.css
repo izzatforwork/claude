@@ -43,3 +43,13 @@
 .sop-bar button.sop-stop:hover {
   background: #ef4444;
 }
+
+.sop-bar button.sop-cancel {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #cbd5e1;
+}
+
+.sop-bar button.sop-cancel:hover {
+  background: rgba(255, 255, 255, 0.12);
+}

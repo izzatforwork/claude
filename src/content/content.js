@@ -49,6 +49,14 @@ async function init() {
     }
   }
 
+  function teardown() {
+    captureBtn.destroy();
+    controlBar.destroy();
+    // Allow a fresh Start Recording on this same tab (without navigating)
+    // to re-run init() instead of being silently skipped by the guard above.
+    window.__sopRecorderInjected = false;
+  }
+
   const captureBtn = createCaptureButton({ onCapture: handleCapture });
   const controlBar = createControlBar({
     onContinue: async () => {
@@ -61,12 +69,19 @@ async function init() {
     },
     onExport: async () => {
       await sendToBackground({ type: MSG.STOP_SESSION });
-      captureBtn.destroy();
-      controlBar.destroy();
-      // Allow a fresh Start Recording on this same tab (without navigating)
-      // to re-run init() instead of being silently skipped by the guard above.
-      window.__sopRecorderInjected = false;
+      teardown();
     },
+    onCancel: async () => {
+      if (!window.confirm('Cancel this recording? All captured steps will be discarded.')) return;
+      await sendToBackground({ type: MSG.CANCEL_SESSION });
+      teardown();
+    },
+  });
+
+  // Session ended from elsewhere (another tab exported/cancelled it, or the
+  // popup's own Cancel Recording button was used) - tear down here too.
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type === MSG.SESSION_ENDED) teardown();
   });
 
   function render(warning) {

@@ -6,6 +6,7 @@ export const MSG = {
   NEW_PART: 'NEW_PART',
   STOP_SESSION: 'STOP_SESSION',
   CANCEL_SESSION: 'CANCEL_SESSION',
+  SESSION_ENDED: 'SESSION_ENDED', // background -> content: tear down the overlay (export or cancel happened, possibly from another tab)
 };
 
 // Session lifecycle statuses, tracked in the background service worker.

@@ -37,7 +37,7 @@ export function createCaptureButton({ onCapture }) {
 
 // Creates a floating control bar (Continue to Part 2 + Export buttons) inside a Shadow DOM.
 // Returns { root, updateState(), hide(), show(), destroy() }.
-export function createControlBar({ onContinue, onExport }) {
+export function createControlBar({ onContinue, onExport, onCancel }) {
   const host = document.createElement('div');
   host.id = 'sop-control-bar-host';
   host.style.cssText = 'all: initial; position: fixed; bottom: 16px; right: 16px; z-index: 2147483647;';
@@ -54,6 +54,7 @@ export function createControlBar({ onContinue, onExport }) {
     <span class="sop-warning" data-role="warning" hidden>Storage almost full</span>
     <button data-role="continue" type="button"></button>
     <button data-role="export" type="button" class="sop-stop">Export</button>
+    <button data-role="cancel" type="button" class="sop-cancel">Cancel</button>
   `;
   shadow.appendChild(bar);
 
@@ -61,9 +62,11 @@ export function createControlBar({ onContinue, onExport }) {
   const warningEl = bar.querySelector('[data-role="warning"]');
   const continueBtn = bar.querySelector('[data-role="continue"]');
   const exportBtn = bar.querySelector('[data-role="export"]');
+  const cancelBtn = bar.querySelector('[data-role="cancel"]');
 
   continueBtn.addEventListener('click', onContinue);
   exportBtn.addEventListener('click', onExport);
+  cancelBtn.addEventListener('click', onCancel);
 
   document.documentElement.appendChild(host);
 
